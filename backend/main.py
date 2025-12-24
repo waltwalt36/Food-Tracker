@@ -105,9 +105,7 @@ def create_entry(entry: EntryCreate):
            total_fat, saturated_fat, trans_fat, cholesterol, sodium,
            total_carbs, dietary_fiber, total_sugars, added_sugars, protein)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
- Query your database for the user
-    # This is pseudocode; replace with your DB logic
-    user_record = db.query(User).filter(User.email == email).first()        RETURNING id;
+        RETURNING id;    
         """
 
         # Use getattr to be defensive, but Pydantic gives defaults so getattr is extra-safe
