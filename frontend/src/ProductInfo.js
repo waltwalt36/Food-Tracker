@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { authFetch } from "./api/auth";
 
 /*
   ProductInfo
@@ -83,16 +84,18 @@ const ProductInfo = ({ product }) => {
         protein_g: proteinTotal,
       };
 
-      const res = await fetch('http://localhost:8000/api/entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      });
+        // use authFetch so Authorization header (Bearer token) is included
+        const { authFetch } = await import('./api/auth'); // dynamic import path depends on your bundler
+        const res = await authFetch('http://localhost:8000/api/entries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(entry),
+        });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Server error: ${res.status} ${text}`);
-      }
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Server error: ${res.status} ${text}`);
+        }
 
       setLoading(false);
       alert('Added to daily calories!');

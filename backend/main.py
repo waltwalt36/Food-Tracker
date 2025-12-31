@@ -1,10 +1,11 @@
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from datetime import datetime, date, time, timedelta, timezone
 from fastapi import FastAPI, HTTPException, Query, Depends, status
+from datetime import datetime, date, time, timedelta, timezone
 from fastapi.middleware.cors import CORSMiddleware
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
+from jose import jwt, JWTError
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
@@ -89,10 +90,61 @@ def get_db_connection():
             port=os.environ.get("DB_PORT", "5432"),
     )
 
-# Post request
 
-@app.post("/api/entries")
-def create_entry(entry: EntryCreate):
+# ----------
+# AUTH STUFF
+# ----------
+
+# OAuth2 with pass
+# word flow
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/token")
+
+# -------------
+# GET CURR USER
+# -------------
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        if not user_id or not email:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+# ******************************
+# POST REQUEST FOR ENTRIES TABLE
+# ******************************
+
+@app.post("/api/entries", status_code=201)
+def create_entry(entry: EntryCreate, current_user = Depends(get_current_user)):
+    # --- DEBUG: show what we received (temporary; remove in prod) ---
+    print(">>> create_entry called")
+    print("current_user (raw):", repr(current_user))
+    print("entry (pydantic):", entry.json())
+
+    if current_user is None:
+        # token invalid / missing — clear 401
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # extract user id robustly whether current_user is dict or object
+    uid = None
+    if isinstance(current_user, dict):
+        uid = current_user.get("id") or current_user.get("user_id") or current_user.get("sub")
+    else:
+        uid = getattr(current_user, "id", None) or getattr(current_user, "user_id", None) or getattr(current_user, "sub", None)
+
+    if uid is None:
+        # no id found on current_user — return a clear error
+        raise HTTPException(status_code=400, detail="Authenticated user has no id")
+
+    # proceed with DB insert
     conn = None
     cur = None
     try:
@@ -101,15 +153,15 @@ def create_entry(entry: EntryCreate):
 
         sql = """
         INSERT INTO entries
-          (product_name, barcode, calories_per_serving, servings, total_calories,
+          (user_id, product_name, barcode, calories_per_serving, servings, total_calories,
            total_fat, saturated_fat, trans_fat, cholesterol, sodium,
-           total_carbs, dietary_fiber, total_sugars, added_sugars, protein)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id;    
+           total_carbs, dietary_fiber, total_sugars, added_sugars, protein, timestamp)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+        RETURNING id;
         """
 
-        # Use getattr to be defensive, but Pydantic gives defaults so getattr is extra-safe
         values = (
+            str(uid),
             entry.product_name,
             entry.barcode,
             entry.calories_per_serving,
@@ -127,13 +179,22 @@ def create_entry(entry: EntryCreate):
             getattr(entry, "protein", 0.0),
         )
 
+        print("SQL values:", values)
         cur.execute(sql, values)
-        new_id = cur.fetchone()[0]
+        new_row = cur.fetchone()
+        print("fetchone:", new_row)
+        if new_row is None:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail="Insert did not return id")
+        new_id = new_row[0]
         conn.commit()
         return {"message": "Entry added", "id": str(new_id)}
+    except HTTPException:
+        raise
     except Exception as e:
         if conn:
             conn.rollback()
+        print("create_entry exception:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur:
@@ -141,8 +202,9 @@ def create_entry(entry: EntryCreate):
         if conn:
             conn.close()
 
+
 # ----------------------------------------
-# entry out class to return a certain item
+# ENTRY OUT CLASS TO RETURN A CERTAIN ITEM
 # ----------------------------------------
 
 class EntryOut(BaseModel):
@@ -165,6 +227,10 @@ class EntryOut(BaseModel):
     protein: Optional[float] = 0.0
 
     timestamp: Optional[str]
+
+# ---------------------------------    
+# DELETE ENDPOINT FOR ENTRIES TABLE
+# ---------------------------------
 
 @app.get("/api/entries", response_model=list[EntryOut])
 def get_entries_by_date(date: str = Query(..., description="YYYY-MM-DD")):
@@ -226,9 +292,9 @@ def get_entries_by_date(date: str = Query(..., description="YYYY-MM-DD")):
         if conn:
             conn.close()
 
-# ---------------    
-# DELETE ENDPOINT
-# ---------------
+# ----------------------------------   
+# DELETE ENDPOINT FOR ENTRIES TABLE
+# ----------------------------------
 
 @app.delete("/api/entries/{entry_id}", status_code=204)
 def delete_entry(entry_id: UUID):
@@ -265,38 +331,152 @@ def delete_entry(entry_id: UUID):
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Fake secret key for JWT signing (in production, keep this secret!)
-SECRET_KEY = "Waltclem2006@"
+SECRET_KEY = os.environ.get("SECRET_KEY", "Waltclem2006@")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24h for dev
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
 
-def get_password_hash(password):
+def hash_password(password: str) -> str:
+    # Truncate to 72 characters for bcrypt
+    if len(password) > 72:
+        password = password[:72]
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: timedelta):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + expires_delta
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+# -----------------------------------------------
+# FUNCTION GETS USER INFORMATION USING USER EMAIL
+# -----------------------------------------------
 
-# ----------
-# AUTH STUFF
-# ----------
-
-# OAuth2 with pass
-# word flow
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-#function gets the user from db
-def get_user(email: str):
+def get_user_by_email(email: str):
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE email = %s;", (email,))
-            user_record = cur.fetchone()
-            return user_record
+            cur.execute(
+                "SELECT id, email, password_hash FROM users WHERE email = %s;",
+                (email,)
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+# -----------------------------------------------------
+# HELPER FUNCTION CREATES USER USING EMAIL AND PASSWORD
+# -----------------------------------------------------
+
+def create_user(email: str, password: str):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            pwd_hash = hash_password(password)
+            cur.execute(
+                """
+                INSERT INTO users (email, password_hash, created_at)
+                VALUES (%s, %s, NOW())
+                RETURNING id;
+                """,
+                (email, pwd_hash)
+            )
+            user_id = cur.fetchone()[0]
+            conn.commit()
+            return {"id": str(user_id), "email": email}
+    finally:
+        conn.close()
+
+# --------------
+# TOKEN CREATION
+# --------------
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+# ------------
+# SIGNUP ROUTE
+# ------------
+
+@app.post("/api/signup")
+def signup(payload: dict):
+    email = payload.get("email")
+    password = payload.get("password")
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+
+    if get_user_by_email(email):
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    user = create_user(email, password)
+    return {"message": "User created", "user": user}
+
+# -----------
+# LOGIN ROUTE
+# -----------
+
+@app.post("/api/token")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = get_user_by_email(form_data.username)
+    if not user or not verify_password(form_data.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = create_access_token({
+        "sub": str(user["id"]),
+        "email": user["email"]
+    })
+
+    return {"access_token": token, "token_type": "bearer"}
+
+# -----------
+# GET ENTRIES
+# -----------
+
+@app.get("/api/entries")
+def get_entries(date: str, current_user=Depends(get_current_user)):
+    start = datetime.fromisoformat(date)
+    end = start + timedelta(days=1)
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM entries
+                WHERE user_id = %s
+                AND timestamp >= %s
+                AND timestamp < %s
+                ORDER BY timestamp ASC;
+                """,
+                (current_user["id"], start, end)
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+# --------------
+# DELETE ENTRIES
+# --------------
+
+@app.delete("/api/entries/{entry_id}")
+def delete_entry(entry_id: str, current_user=Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM entries
+                WHERE id = %s AND user_id = %s;
+                """,
+                (entry_id, current_user["id"])
+            )
+            conn.commit()
+            return {"message": "Entry deleted"}
     finally:
         conn.close()
