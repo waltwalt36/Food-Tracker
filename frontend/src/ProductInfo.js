@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { authFetch } from "./api/auth";
+import { useAuth } from "./auth/AuthProvider";
 
 /*
   ProductInfo
@@ -8,54 +8,55 @@ import { authFetch } from "./api/auth";
 */
 
 const ProductInfo = ({ product }) => {
-  const [servings, setServings] = useState(1);
-  const [loading, setLoading] = useState(false);
+    const { user } = useAuth();
+    const [servings, setServings] = useState(1);
+    const [loading, setLoading] = useState(false);
 
-  if (!product) return null;
+    if (!product) return null;
 
-  const nutriments = product.nutriments || {};
+    const nutriments = product.nutriments || {};
 
-  const fmt = (key, options = {}) => {
-    const { mul = 1 } = options;
-    const v = nutriments[key];
-    if (v === undefined || v === null) return '0';
-    const num = (typeof v === 'number') ? v : parseFloat(v);
-    if (Number.isNaN(num)) return '0';
-    const servingCount = Number(servings) || 1;
-    const total = num * mul * servingCount;
-    return `${Math.round(total * 100) / 100}`;
-  };
+    const fmt = (key, options = {}) => {
+        const { mul = 1 } = options;
+        const v = nutriments[key];
+        if (v === undefined || v === null) return '0';
+        const num = (typeof v === 'number') ? v : parseFloat(v);
+        if (Number.isNaN(num)) return '0';
+        const servingCount = Number(servings) || 1;
+        const total = num * mul * servingCount;
+        return `${Math.round(total * 100) / 100}`;
+    };
 
-  // parse a nutriment into a float (per single serving or per-100g value)
-  const parseNut = (key, options = {}) => {
-    const { mul = 1 } = options;
-    const v = nutriments[key];
-    if (v === undefined || v === null) return 0;
-    const num = parseFloat(v);
-    if (Number.isNaN(num)) return 0;
-    return num * mul;
-  };
+    // parse a nutriment into a float (per single serving or per-100g value)
+    const parseNut = (key, options = {}) => {
+        const { mul = 1 } = options;
+        const v = nutriments[key];
+        if (v === undefined || v === null) return 0;
+        const num = parseFloat(v);
+        if (Number.isNaN(num)) return 0;
+        return num * mul;
+    };
 
-  const handleAddToDatabase = async () => {
+const handleAddToDatabase = async () => {
     try {
-      setLoading(true);
+    setLoading(true);
 
-      const caloriesPerServing = parseFloat(nutriments['energy-kcal'] ?? nutriments['energy-kcal_100g'] ?? 0) || 0;
-      const servingsNumber = Number(servings) || 0;
+    const caloriesPerServing = parseFloat(nutriments['energy-kcal'] ?? nutriments['energy-kcal_100g'] ?? 0) || 0;
+    const servingsNumber = Number(servings) || 0;
 
-      // build entry using parsing helper; convert units where appropriate
-      const totalFat = Math.round(parseNut('fat') * servingsNumber * 100) / 100;
-      const satFat = Math.round(parseNut('saturated-fat') * servingsNumber * 100) / 100;
-      const transFat = Math.round(parseNut('trans-fat') * servingsNumber * 100) / 100 || 0;
-      const cholesterolMg = Math.round(parseNut('cholesterol', { mul: 1000 }) * servingsNumber * 100) / 100;
-      const sodiumMg = Math.round(parseNut('sodium', { mul: 1000 }) * servingsNumber * 100) / 100;
-      const carbsTotal = Math.round(parseNut('carbohydrates') * servingsNumber * 100) / 100;
-      const fiberTotal = Math.round(parseNut('fiber') * servingsNumber * 100) / 100;
-      const sugarsTotal = Math.round(parseNut('sugars') * servingsNumber * 100) / 100;
-      const addedSugarsTotal = Math.round(parseNut('added-sugars') * servingsNumber * 100) / 100;
-      const proteinTotal = Math.round(parseNut('proteins') * servingsNumber * 100) / 100;
+    // build entry using parsing helper; convert units where appropriate
+    const totalFat = Math.round(parseNut('fat') * servingsNumber * 100) / 100;
+    const satFat = Math.round(parseNut('saturated-fat') * servingsNumber * 100) / 100;
+    const transFat = Math.round(parseNut('trans-fat') * servingsNumber * 100) / 100 || 0;
+    const cholesterolMg = Math.round(parseNut('cholesterol', { mul: 1000 }) * servingsNumber * 100) / 100;
+    const sodiumMg = Math.round(parseNut('sodium', { mul: 1000 }) * servingsNumber * 100) / 100;
+    const carbsTotal = Math.round(parseNut('carbohydrates') * servingsNumber * 100) / 100;
+    const fiberTotal = Math.round(parseNut('fiber') * servingsNumber * 100) / 100;
+    const sugarsTotal = Math.round(parseNut('sugars') * servingsNumber * 100) / 100;
+    const addedSugarsTotal = Math.round(parseNut('added-sugars') * servingsNumber * 100) / 100;
+    const proteinTotal = Math.round(parseNut('proteins') * servingsNumber * 100) / 100;
 
-      const entry = {
+    const entry = {
         product_name: product.product_name || product.product_name_en || 'Unnamed product',
         barcode: product.code || product._id || null,
         calories_per_serving: Math.round(caloriesPerServing),
@@ -82,29 +83,29 @@ const ProductInfo = ({ product }) => {
         added_sugars: addedSugarsTotal,
         protein: proteinTotal,
         protein_g: proteinTotal,
-      };
+    };
 
-        // use authFetch so Authorization header (Bearer token) is included
-        const { authFetch } = await import('./api/auth'); // dynamic import path depends on your bundler
-        const res = await authFetch('http://localhost:8000/api/entries', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(entry),
-        });
+    // use authFetch so Authorization header (Bearer token) is included
+    const { authFetch } = await import('./api/auth'); // dynamic import path depends on your bundler
+    const res = await authFetch('http://localhost:8000/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+    });
 
-        if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Server error: ${res.status} ${text}`);
-        }
-
-      setLoading(false);
-      alert('Added to daily calories!');
-    } catch (err) {
-      setLoading(false);
-      console.error('Error saving entry:', err);
-      alert('Could not save entry: ' + (err.message || err));
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error: ${res.status} ${text}`);
     }
-  };
+
+    setLoading(false);
+    alert('Added to daily calories!');
+    } catch (err) {
+    setLoading(false);
+    console.error('Error saving entry:', err);
+    alert('Could not save entry: ' + (err.message || err));
+    }
+};
 
   return (
     <div>
@@ -133,9 +134,10 @@ const ProductInfo = ({ product }) => {
             style={{ marginLeft: 8, width: 80 }}
           />
         </label>
-        <button onClick={handleAddToDatabase} disabled={loading} style={{ marginLeft: 12 }}>
+        <button onClick={handleAddToDatabase} disabled={loading || !user} style={{ marginLeft: 12 }} title= {!user ? "Log in to save entries" : ""}>
           {loading ? 'Saving...' : 'Add to Daily Calories'}
         </button>
+        {!user && <div style={{ color: "crimson", marginTop: 8 }}>You must be logged in to save entries.</div>}
       </div>
     </div>
   );

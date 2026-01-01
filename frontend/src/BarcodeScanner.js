@@ -1,13 +1,54 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Quagga from 'quagga';
 import axios from 'axios';
 import ProductInfo from './ProductInfo';
+import ManualBarcodeInput from './ManualBarcodeInput';
 
 const BarcodeScanner = () => {
   const [product, setProduct] = useState(null);
+  const lastScanRef = useRef(0);
+  const coolDown = 2000;
+
+  // shared lookup function used by both scanner and manual input
+  const lookupBarcode = async (Barcode) => {
+    try {
+      const now = Date.now();
+
+      // if this call comes from scanner, we already check cooldown in onDetected,
+      // but keep this here as a defensive check for manual calls too.
+      if (now - lastScanRef.current < coolDown) {
+        console.log('Lookup ignored due to cooldown');
+        return;
+      }
+
+      // mark the time so subsequent calls are rate-limited
+      lastScanRef.current = now;
+
+      console.log('Looking up barcode:', Barcode);
+
+      const response = await axios.post(
+        'http://localhost:8000/lookup',
+        { barcode: Barcode },
+        {
+          headers: { 'content-type': 'application/json' },
+        }
+      );
+
+      console.log('Nutrition info:', response.data);
+
+      // support different response shapes (your existing code already handled this)
+      const p = response.data.product?.product ?? response.data.product;
+      setProduct(p);
+    } catch (error) {
+      console.error('Error fetching nutrition info:', error);
+      // optionally surface an error to the user; for now we just clear product
+      setProduct(null);
+    }
+  };
 
   useEffect(() => {
-    Quagga.init({
+    Quagga.init(
+      {
       inputStream: {
         type: 'LiveStream',
         constraints: {
@@ -27,44 +68,20 @@ const BarcodeScanner = () => {
       Quagga.start();
     });
 
-    // variable to keep track of last time a barcode was scanned
-    let lastScanTime = 0;
-    // cool down time = 2 seconds or 2000 miliseconds
-    const coolDown = 2000;
-
     Quagga.onDetected((data) => {
       const Barcode = data.codeResult.code;
-      const now = Date.now()
+      const now = Date.now();
 
-      // if loop to check of scan was less than 2 seconds ago
-      if (now - lastScanTime > coolDown){
-        console.log('Barcode detected:', {
-            Barcode
-          })
+      // enforce cooldown using lastScanRef so manual and scanner share it
+      if (now - lastScanRef.current > coolDown) {
+        console.log('Barcode detected:', { Barcode });
 
-        // Set lastScanTime to now
-        lastScanTime = now;
+        // update lastScanRef here (defensive; lookupBarcode will also set it)
+        lastScanRef.current = now;
 
-        // Send the barcode to your FastAPI backend
-        axios.post('http://localhost:8000/lookup', 
-          { barcode: Barcode },
-          {
-            headers: {
-              'content-type': 'application/json'
-            }
-          }
-        )
-        .then(response => {
-          // leaving this console log for future debugging
-          console.log('Nutrition info:', response.data);
-          // Here you can update your component state with the nutrition info and display it
-          const p = response.data.product?.product ?? response.data.product;
-          setProduct(p);
-        })
-        .catch(error => {
-          console.error('Error fetching nutrition info:', error);
-        });
-      }else{
+        // call shared lookup function
+        lookupBarcode(Barcode);
+      } else {
         console.log('Scan ignored due to cooldown');
       }
     });
@@ -72,10 +89,15 @@ const BarcodeScanner = () => {
     return () => {
       Quagga.stop();
       if (Quagga.offDetected) {
-        try { Quagga.offDetected(); } catch (e) { /* ignore if not supported */ }
+        try {
+          Quagga.offDetected();
+        } catch (e) {
+          /* ignore if not supported */
+        }
       }
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
 
   return (
     <div>
@@ -87,17 +109,22 @@ const BarcodeScanner = () => {
           style={{ flex: 1, minHeight: 360, background: '#FFF' }}
         />
         <div style={{ width: 360 }}>
-          {product ? (
-            <ProductInfo product={product} />
-          ) : (
-            <div style={{ padding: 12, color: '#666' }}>Scan a product to see nutrition info</div>
-          )}
+          {/* Manual barcode input wired to the same lookup function */}
+          <ManualBarcodeInput onLookup={lookupBarcode} />
+
+          <div style={{ marginTop: 12 }}>
+            {product ? (
+              <ProductInfo product={product} />
+            ) : (
+              <div style={{ padding: 12, color: '#666' }}>
+                Scan a product or type a barcode to see nutrition info
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
-
-
 
 export default BarcodeScanner;

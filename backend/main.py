@@ -480,3 +480,16 @@ def delete_entry(entry_id: str, current_user=Depends(get_current_user)):
             return {"message": "Entry deleted"}
     finally:
         conn.close()
+
+# ----------
+# GET TOKEN
+# ----------
+@app.get("/api/me")
+def read_me(current_user = Depends(get_current_user)):
+    try:
+        payload = dict(current_user)
+    except Exception:
+        # if it's already a dict-like, make a shallow copy
+        payload = current_user if isinstance(current_user, dict) else {"id": None, "email": None}
+    # Optionally filter out sensitive fields before returning
+    return {"id": payload.get("id"), "email": payload.get("email")}

@@ -1,7 +1,8 @@
 // src/components/Login.jsx
 import React, { useState } from "react";
-import { login, saveToken } from "../api/auth";
+import { login } from "../api/auth";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthProvider";
 
 export default function Login(){
   const [email, setEmail] = useState("");
@@ -9,12 +10,15 @@ export default function Login(){
   const [err, setErr] = useState(null);
   const nav = useNavigate();
 
+  const { loginWithToken } = useAuth();
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setErr(null);
     try {
       const { access_token } = await login(email, password);
-      saveToken(access_token);
+      console.log("received access_token:", access_token);
+      await loginWithToken(access_token);
       nav("/");
     } catch (error) {
       setErr(error.message);
