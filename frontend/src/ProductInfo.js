@@ -7,7 +7,7 @@ import { useAuth } from "./auth/AuthProvider";
   - supports selecting servings and saving an entry to the backend
 */
 
-const ProductInfo = ({ product }) => {
+const ProductInfo = ({ product, onAdded }) => {
     const { user } = useAuth();
     const [servings, setServings] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -98,12 +98,50 @@ const handleAddToDatabase = async () => {
         throw new Error(`Server error: ${res.status} ${text}`);
     }
 
+    // parse created entry if backend returned it
+    let createdEntryRaw = null;
+    try {
+        createdEntryRaw = await res.json();
+        console.log("ProductInfo: createdEntryRaw from server:", createdEntryRaw);
+    } catch (e) {
+        console.warn("ProductInfo: failed to parse POST response as JSON", e);
+    }
+
+    // normalize keys to the shape DailySummary expects
+    const normalizeEntry = (e) => {
+    if (!e) return null;
+        return {
+            id: e.id ?? e._id ?? e.entry_id ?? null,
+            timestamp: e.timestamp ?? e.created_at ?? e.createdAt ?? null,
+            product_name: e.product_name ?? e.name ?? e.productName ?? "Unnamed",
+            total_calories: e.total_calories ?? e.total_cals ?? e.calories ?? e.totalCalories ?? null,
+            servings: e.servings ?? null,
+            fat: e.fat ?? e.total_fat ?? null,
+            carbs: e.carbs ?? e.total_carbs ?? null,
+            protein: e.protein ?? e.protein_g ?? null,
+            // keep original raw for debugging if needed:
+            __raw: e,
+        };
+    };
+
+    const createdEntry = normalizeEntry(createdEntryRaw);
+
     setLoading(false);
     alert('Added to daily calories!');
+
+    console.log("entry saved, calling onAdded with normalized createdEntry:", createdEntry);
+    // Notify parent to refresh DailySummary (and provide created entry if available)
+    if (typeof onAdded === "function") {
+        try {
+            onAdded(createdEntry ?? null);
+        } catch (err) {
+            console.warn("onAdded callback failed:", err);
+        }
+    }
     } catch (err) {
-    setLoading(false);
-    console.error('Error saving entry:', err);
-    alert('Could not save entry: ' + (err.message || err));
+        setLoading(false);
+        console.error('Error saving entry:', err);
+        alert('Could not save entry: ' + (err.message || err));
     }
 };
 

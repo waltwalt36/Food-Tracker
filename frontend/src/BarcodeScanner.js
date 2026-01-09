@@ -3,9 +3,12 @@ import Quagga from 'quagga';
 import axios from 'axios';
 import ProductInfo from './ProductInfo';
 import ManualBarcodeInput from './ManualBarcodeInput';
+import DailySummary from "./components/DailySummary";
 
 const BarcodeScanner = () => {
   const [product, setProduct] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(0);
+  const [lastAddedEntry, setLastAddedEntry] = useState(null);
   const lastScanRef = useRef(0);
   const coolDown = 2000;
 
@@ -109,12 +112,26 @@ const BarcodeScanner = () => {
           style={{ flex: 1, minHeight: 360, background: '#FFF' }}
         />
         <div style={{ width: 360 }}>
+          {/* DAILY SUMMARY: will refetch when lastUpdated changes */}
+          <DailySummary dailyGoal={2200} lastUpdated={lastUpdated} lastAddedEntry={lastAddedEntry}/>
+
           {/* Manual barcode input wired to the same lookup function */}
-          <ManualBarcodeInput onLookup={lookupBarcode} />
+          <div style={{ marginTop: 16 }}>
+            <ManualBarcodeInput onLookup={lookupBarcode} />
+          </div>
 
           <div style={{ marginTop: 12 }}>
             {product ? (
-              <ProductInfo product={product} />
+              <ProductInfo product={product} onAdded={(createdEntry) => {
+                console.log("BarcodeScanner: onAdded called with:", createdEntry);
+                if (createdEntry) {
+                  // set lastAddedEntry so DailySummary can optimistically update
+                  setLastAddedEntry(createdEntry);
+                }
+                // bump lastUpdated so DailySummary also refetches
+                setLastUpdated(Date.now());
+              }}
+            />
             ) : (
               <div style={{ padding: 12, color: '#666' }}>
                 Scan a product or type a barcode to see nutrition info

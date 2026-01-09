@@ -1,5 +1,5 @@
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi import FastAPI, HTTPException, Query, Depends, status
+from fastapi import FastAPI, HTTPException, Query, Depends, status, APIRouter
 from datetime import datetime, date, time, timedelta, timezone
 from fastapi.middleware.cors import CORSMiddleware
 from psycopg2.extras import RealDictCursor
@@ -123,84 +123,70 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 # ******************************
 
 @app.post("/api/entries", status_code=201)
-def create_entry(entry: EntryCreate, current_user = Depends(get_current_user)):
-    # --- DEBUG: show what we received (temporary; remove in prod) ---
-    print(">>> create_entry called")
-    print("current_user (raw):", repr(current_user))
-    print("entry (pydantic):", entry.json())
+def create_entry(entry: dict, current_user = Depends(get_current_user)):
+    """
+    Insert an entry and RETURN the inserted row to the client.
+    Expects `entry` to include keys like product_name, barcode, calories_per_serving, servings, total_calories, fat, carbs, protein.
+    """
 
-    if current_user is None:
-        # token invalid / missing — clear 401
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    # extract user id robustly whether current_user is dict or object
-    uid = None
-    if isinstance(current_user, dict):
-        uid = current_user.get("id") or current_user.get("user_id") or current_user.get("sub")
-    else:
-        uid = getattr(current_user, "id", None) or getattr(current_user, "user_id", None) or getattr(current_user, "sub", None)
-
-    if uid is None:
-        # no id found on current_user — return a clear error
-        raise HTTPException(status_code=400, detail="Authenticated user has no id")
-
-    # proceed with DB insert
-    conn = None
-    cur = None
+    # Defensive: ensure current_user has an id
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
+        user_id = current_user["id"] if isinstance(current_user, dict) else getattr(current_user, "id", None)
+    except Exception:
+        user_id = None
 
-        sql = """
-        INSERT INTO entries
-          (user_id, product_name, barcode, calories_per_serving, servings, total_calories,
-           total_fat, saturated_fat, trans_fat, cholesterol, sodium,
-           total_carbs, dietary_fiber, total_sugars, added_sugars, protein, timestamp)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
-        RETURNING id;
-        """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
-        values = (
-            str(uid),
-            entry.product_name,
-            entry.barcode,
-            entry.calories_per_serving,
-            entry.servings,
-            entry.total_calories,
-            getattr(entry, "fat", 0.0),
-            getattr(entry, "saturated_fat", 0.0),
-            getattr(entry, "trans_fat", 0.0),
-            getattr(entry, "cholesterol", 0.0),
-            getattr(entry, "sodium", 0.0),
-            getattr(entry, "carbs", 0.0),
-            getattr(entry, "fiber", 0.0),
-            getattr(entry, "sugars", 0.0),
-            getattr(entry, "added_sugars", 0.0),
-            getattr(entry, "protein", 0.0),
-        )
+    # Build insert fields (use defaults if missing)
+    barcode = entry.get("barcode")
+    product_name = entry.get("product_name") or entry.get("name") or "Unnamed"
+    calories_per_serving = entry.get("calories_per_serving")
+    servings = entry.get("servings") if entry.get("servings") is not None else 1
+    total_calories = entry.get("total_calories") if entry.get("total_calories") is not None else (
+        (calories_per_serving or 0) * (servings or 1)
+    )
+    fat = entry.get("fat")
+    carbs = entry.get("carbs")
+    protein = entry.get("protein")
+    created_at = datetime.utcnow()  # store in UTC
 
-        print("SQL values:", values)
-        cur.execute(sql, values)
-        new_row = cur.fetchone()
-        print("fetchone:", new_row)
-        if new_row is None:
-            conn.rollback()
-            raise HTTPException(status_code=500, detail="Insert did not return id")
-        new_id = new_row[0]
-        conn.commit()
-        return {"message": "Entry added", "id": str(new_id)}
-    except HTTPException:
-        raise
+    sql = """
+    INSERT INTO entries
+      (user_id, barcode, product_name, calories_per_serving, servings, total_calories, total_fat, total_carbs, protein, timestamp)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    RETURNING id, user_id, barcode, product_name, calories_per_serving, servings, total_calories, fat, carbs, protein, created_at;
+    """
+
+    params = (
+        user_id,
+        entry.get("barcode"),
+        entry.get("product_name"),
+        entry.get("calories_per_serving"),
+        entry.get("servings"),
+        entry.get("total_calories"),
+        entry.get("fat"),     # map fat → total_fat
+        entry.get("carbs"),   # map carbs → total_carbs
+        entry.get("protein"),
+        created_at,
+    )
+
+    db_conn = get_db_connection()
+    cur = db_conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(sql, params)
+        created = cur.fetchone()
+        db_conn.commit()
     except Exception as e:
-        if conn:
-            conn.rollback()
-        print("create_entry exception:", repr(e))
+        db_conn.rollback()
+        # log e if you have logging
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
+        cur.close()
+        db_conn.close()
+
+    # Return created row (RealDictRow is JSON-serializable by FastAPI)
+    return created
 
 
 # ----------------------------------------
