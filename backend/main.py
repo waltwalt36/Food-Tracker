@@ -149,26 +149,26 @@ def create_entry(entry: dict, current_user = Depends(get_current_user)):
     fat = entry.get("fat")
     carbs = entry.get("carbs")
     protein = entry.get("protein")
-    created_at = datetime.utcnow()  # store in UTC
+    timestamp = datetime.utcnow()  # store in UTC
 
     sql = """
     INSERT INTO entries
       (user_id, barcode, product_name, calories_per_serving, servings, total_calories, total_fat, total_carbs, protein, timestamp)
     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-    RETURNING id, user_id, barcode, product_name, calories_per_serving, servings, total_calories, fat, carbs, protein, created_at;
+    RETURNING *;
     """
 
     params = (
         user_id,
         entry.get("barcode"),
-        entry.get("product_name"),
+        entry.get("product_name") or "Unamed",
         entry.get("calories_per_serving"),
-        entry.get("servings"),
+        entry.get("servings") or 1,
         entry.get("total_calories"),
         entry.get("fat"),     # map fat → total_fat
         entry.get("carbs"),   # map carbs → total_carbs
         entry.get("protein"),
-        created_at,
+        datetime.utcnow(),
     )
 
     db_conn = get_db_connection()
