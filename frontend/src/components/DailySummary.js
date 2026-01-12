@@ -2,6 +2,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { authFetch } from "../api/auth";
 import ProgressRing from "./ProgressRing";
+import EntryRow from "./EntryRow";
+
 
 /**
  * Props:
@@ -11,6 +13,8 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState([]);
   const [error, setError] = useState(null);
+  const [removingIds, setRemovingIds] = useState(new Set());
+
 
   // build YYYY-MM-DD in local time
   const buildTodayDate = () => {
@@ -163,6 +167,37 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
     saveGoal(def);
   };
 
+  const handleRemove = async (entry) => {
+  const id = entry.id;
+
+  if (!window.confirm("Remove this item?")) return;
+
+  // optimistic UI update
+  setEntries((prev) => prev.filter((e) => e.id !== id));
+  setRemovingIds((prev) => new Set([...prev, id]));
+
+  try {
+    const res = await authFetch(`/api/entries/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to delete");
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Failed to remove item");
+    fetchEntriesForToday(); // restore from server
+  } finally {
+    setRemovingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+  };
+
+
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
       {/* Progress column */}
@@ -229,19 +264,13 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
             <div style={{ color: "#666" }}>No items yet — scan or add a product.</div>
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {entries.map((it) => (
-                <li key={it.id ?? it._id ?? (it.timestamp || Math.random())} style={{ padding: 8, borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{it.product_name ?? it.name ?? "Unnamed"}</div>
-                    <div style={{ fontSize: 12, color: "#666" }}>
-                      {it.servings ? `${it.servings} serving(s)` : ""}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 700 }}>{Math.round(it.total_calories ?? it.calories ?? 0)} kcal</div>
-                    {/* optional: small remove button could go here */}
-                  </div>
-                </li>
+              {entries.map((entry) => (
+                <EntryRow
+                  key={entry.id ?? entry._id ?? entry.timestamp}
+                  entry={entry}
+                  isRemoving={removingIds.has(entry.id)}
+                  onRemove={handleRemove}
+                />
               ))}
             </ul>
           )}
