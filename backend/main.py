@@ -283,31 +283,25 @@ def get_entries_by_date(date: str = Query(..., description="YYYY-MM-DD")):
 # ----------------------------------
 
 @app.delete("/api/entries/{entry_id}", status_code=204)
-def delete_entry(entry_id: UUID):
-    conn = None
-    cur = None
+def delete_entry(entry_id: int, current_user=Depends(get_current_user)):
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        sql = "DELETE FROM entries WHERE id = %s RETURNING id;"
-        cur.execute(sql, (str(entry_id),))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Entry not found")
-        conn.commit()
-        return None  # 204 no content
-    except HTTPException:
-        # re-raise expected HTTP errors
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM entries
+                    WHERE id = %s AND user_id = %s
+                    RETURNING id
+                    """,
+                    (entry_id, current_user["id"]),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Entry not found")
+        return
     finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
+        conn.close()
 
 # -----------------------------------
 # USER VERIFICATION STUFF USING AUTH

@@ -1,5 +1,6 @@
 // src/components/DailySummary.js
 import React, { useEffect, useState, useCallback } from "react";
+import { deleteEntry } from "../utils/api";
 import { authFetch } from "../api/auth";
 import ProgressRing from "./ProgressRing";
 import EntryRow from "./EntryRow";
@@ -168,35 +169,27 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
   };
 
   const handleRemove = async (entry) => {
-  const id = entry.id;
+    const id = entry.id;
 
-  if (!window.confirm("Remove this item?")) return;
+    if (!window.confirm("Remove this item?")) return;
 
-  // optimistic UI update
-  setEntries((prev) => prev.filter((e) => e.id !== id));
-  setRemovingIds((prev) => new Set([...prev, id]));
+    // optimistic UI update
+    setEntries((prev) => 
+      prev.filter(
+        (e) => 
+          (e.id ?? e._id ?? e._id?.$oid) !==
+          (entry.id ?? entry._id ?? entry._id?.$oid)
+      )
+    );
 
-  try {
-    const res = await authFetch(`/api/entries/${id}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to delete");
+    try {
+      await deleteEntry(id); // <-- clean API call
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert("Failed to delete item");
+      fetchEntriesForToday(); // rollback by refetching
     }
-  } catch (err) {
-    console.error(err);
-    alert("Failed to remove item");
-    fetchEntriesForToday(); // restore from server
-  } finally {
-    setRemovingIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-  };
-
+};
 
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
