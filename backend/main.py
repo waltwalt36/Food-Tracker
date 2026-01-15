@@ -417,10 +417,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 # GET ENTRIES
 # -----------
 
-@app.get("/api/entries")
+@app.get("/api/entries/")
 def get_entries(date: str, current_user=Depends(get_current_user)):
-    start = datetime.fromisoformat(date)
-    end = start + timedelta(days=1)
+    # validate date format early
+    try:
+        # ensures `date` is YYYY-MM-DD
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
 
     conn = get_db_connection()
     try:
@@ -430,13 +434,15 @@ def get_entries(date: str, current_user=Depends(get_current_user)):
                 SELECT *
                 FROM entries
                 WHERE user_id = %s
-                AND timestamp >= %s
-                AND timestamp < %s
+                  AND (timestamp::date) = %s
                 ORDER BY timestamp ASC;
                 """,
-                (current_user["id"], start, end)
+                (current_user["id"], date)
             )
-            return cur.fetchall()
+            rows = cur.fetchall()
+            # helpful debug: log count
+            print(f"get_entries: user={current_user['id']} date={date} rows={len(rows)}")
+            return rows
     finally:
         conn.close()
 

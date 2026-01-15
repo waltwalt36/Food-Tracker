@@ -1,6 +1,6 @@
 // src/components/DailySummary.js
 import React, { useEffect, useState, useCallback } from "react";
-import { deleteEntry } from "../utils/api";
+import deleteEntry from "../utils/api";
 import { authFetch } from "../api/auth";
 import ProgressRing from "./ProgressRing";
 import EntryRow from "./EntryRow";
@@ -52,9 +52,15 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
     try {
       setLoading(true);
       setError(null);
-      const tzOffset = new Date().getTimezoneOffset();
-      const res = await authFetch(`/api/entries?date=${date}&tz_offset=${tzOffset}`, {
+      const tzOffset = new Date().getTimezoneOffset(); // minutes
+
+      const url = `/api/entries/?date=${encodeURIComponent(date)}&tz_offset=${encodeURIComponent(tzOffset)}&page_size=200`;
+      console.log("fetchEntriesForToday -> GET", url);
+
+      const res = await authFetch(url, {
         method: "GET",
+        headers: { Accept: "application/json" }, // explicit, harmless
+        cache: "no-store"
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -82,7 +88,7 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
     useEffect(() => {
         if (!lastAddedEntry) return;
 
-        console.log("DailySummary: lastAddedEntry received:", lastAddedEntry);
+        console.log("DailySummary: evaluating lastAddedEntry for prepend:", lastAddedEntry);
 
         const exists = entries.some((e) => {
             if (!e) return false;
@@ -104,7 +110,7 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
         });
 
         if (!exists) {
-            console.log("DailySummary: prepending lastAddedEntry to entries");
+            console.log("DailySummary: prepending lastAddedEntry to entries:", lastAddedEntry);
             setEntries((prev) => [lastAddedEntry, ...prev]);
         } else {
             console.log("DailySummary: lastAddedEntry already exists");
@@ -168,28 +174,24 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
     saveGoal(def);
   };
 
-  const handleRemove = async (entry) => {
-    const id = entry.id;
+  // DailySummary.js
+async function handleRemove(id) {
+  // optimistic UI update
+  setEntries(prev => prev.filter(e => e.id !== id));
 
-    if (!window.confirm("Remove this item?")) return;
+  try {
+    await deleteEntry(id); // your deleteEntry should throw on non-2xx
+    console.log("handleRemove: delete confirmed for id", id);
+    // optional: re-fetch to ensure server and client fully in sync
+    // await fetchEntriesForToday();
+  } catch (err) {
+    console.error("handleRemove: delete failed, reverting UI:", err);
+    // revert: re-fetch server state (safer than guessing)
+    await fetchEntriesForToday();
+    alert("Failed to delete item — refreshed list.");
+  }
+}
 
-    // optimistic UI update
-    setEntries((prev) => 
-      prev.filter(
-        (e) => 
-          (e.id ?? e._id ?? e._id?.$oid) !==
-          (entry.id ?? entry._id ?? entry._id?.$oid)
-      )
-    );
-
-    try {
-      await deleteEntry(id); // <-- clean API call
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete item");
-      fetchEntriesForToday(); // rollback by refetching
-    }
-};
 
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
@@ -262,7 +264,7 @@ export default function DailySummary({ dailyGoal: dailyGoalProp = 2000, lastUpda
                   key={entry.id ?? entry._id ?? entry.timestamp}
                   entry={entry}
                   isRemoving={removingIds.has(entry.id)}
-                  onRemove={handleRemove}
+                  onRemove={() => handleRemove(entry.id)}   // <-- pass id only
                 />
               ))}
             </ul>

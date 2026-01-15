@@ -37,27 +37,23 @@ export function saveToken(token) {
 }
 
 export function getToken() {
-  return localStorage.getItem("ft_token");
+  return localStorage.getItem("access_token");
 }
 
 export function logout() {
-  localStorage.removeItem("ft_token");
+  localStorage.removeItem("access_token");
 }
 
 export async function authFetch(url, options = {}) {
-    const token = (() => {
-        try { return localStorage.getItem("access_token"); } catch { return null; }
-    })();
-
-    const headers = new Headers(options.headers || {});
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    const opts = {
-        ...options,
-        headers,
-        // credentials: 'include' // enable only if you use cookies
-    };
-
-    const absolute = url.startsWith("http") ? url : `http://localhost:8000${url}`;
-    console.log("authFetch ->", absolute, opts)
-    return fetch(absolute, opts);
+  const token = localStorage.getItem("access_token");
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const opts = {...options, headers};
+  const absolute = url.startsWith("http") ? url : `http://localhost:8000${url}`;
+  console.log("authFetch ->", opts.method || "GET", absolute);
+  console.log("authFetch headers:", headers);
+  if (opts.body) console.log("authFetch body preview:", typeof opts.body === 'string' ? opts.body.slice(0,1000) : opts.body);
+  const resp = await fetch(absolute, opts);
+  console.log("authFetch response status:", resp.status);
+  return resp;
 }
