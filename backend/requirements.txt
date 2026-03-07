@@ -1,0 +1,9 @@
+fastapi==0.125.0
+uvicorn==0.38.0
+psycopg2-binary==2.9.11
+passlib==1.7.4
+bcrypt==3.2.0
+python-jose==3.5.0
+python-multipart==0.0.21
+pydantic==2.12.5
+requests==2.32.5
