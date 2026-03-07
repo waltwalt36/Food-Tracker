@@ -193,82 +193,92 @@ async function handleRemove(id) {
 }
 
 
+  const macroCard = { flex: 1, padding: "10px 8px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border-btn)", textAlign: "center" };
+
   return (
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      {/* Progress column */}
-      <div style={{ width: 140, textAlign: "center" }}>
-        <ProgressRing radius={64} stroke={10} progress={progress}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>
-              {Math.round(totals.calories)}
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border-btn)", borderRadius: "var(--radius-lg)", padding: 20 }}>
+      <h3 style={{ margin: "0 0 16px", fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text)" }}>
+        Today’s Summary
+      </h3>
+
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        {/* Progress column */}
+        <div style={{ width: 130, textAlign: "center", flexShrink: 0 }}>
+          <ProgressRing radius={64} stroke={10} progress={progress}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text)" }}>
+                {Math.round(totals.calories)}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>kcal</div>
             </div>
-            <div style={{ fontSize: 12, color: "#666" }}>kcal</div>
+          </ProgressRing>
+
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>GOAL</div>
+            <div style={{ fontWeight: 600, fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--text)" }}>{dailyGoal}</div>
+
+            <div style={{ marginTop: 8 }}>
+              {editingGoal ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <input
+                    type="number"
+                    value={goalInput}
+                    onChange={(e) => setGoalInput(e.target.value)}
+                    style={{ width: "100%", padding: "6px 8px", background: "var(--surface-2)", border: "1px solid var(--border-btn)", borderRadius: 8, color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: 13 }}
+                  />
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button onClick={() => saveGoal(goalInput)} style={{ flex: 1, padding: "5px 0", fontSize: 12, background: "var(--accent)", color: "#0A0A08", border: "none", borderRadius: 6, fontWeight: 600 }}>Save</button>
+                    <button onClick={() => { setEditingGoal(false); setGoalInput(dailyGoal); }} style={{ flex: 1, padding: "5px 0", fontSize: 12, background: "var(--surface-3)", color: "var(--text-muted)", border: "1px solid var(--border-btn)", borderRadius: 6 }}>✕</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                  <button onClick={() => setEditingGoal(true)} style={{ fontSize: 11, padding: "4px 8px", background: "var(--surface-3)", border: "1px solid var(--border-btn)", borderRadius: 6, color: "var(--text-soft)" }}>Edit</button>
+                  <button onClick={resetGoalToDefault} style={{ fontSize: 11, padding: "4px 8px", background: "var(--surface-3)", border: "1px solid var(--border-btn)", borderRadius: 6, color: "var(--text-soft)" }}>Reset</button>
+                </div>
+              )}
+            </div>
           </div>
-        </ProgressRing>
+        </div>
 
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 12, color: "#666" }}>Goal</div>
-          <div style={{ fontWeight: 600 }}>{dailyGoal} kcal</div>
+        {/* Macros & list column */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <div style={macroCard}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Protein</div>
+              <div style={{ fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 15, color: "var(--text)" }}>{Math.round(totals.protein)}<span style={{ fontSize: 10, color: "var(--text-muted)" }}> g</span></div>
+            </div>
+            <div style={macroCard}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Carbs</div>
+              <div style={{ fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 15, color: "var(--text)" }}>{Math.round(totals.carbs)}<span style={{ fontSize: 10, color: "var(--text-muted)" }}> g</span></div>
+            </div>
+            <div style={macroCard}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Fat</div>
+              <div style={{ fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 15, color: "var(--text)" }}>{Math.round(totals.fat)}<span style={{ fontSize: 10, color: "var(--text-muted)" }}> g</span></div>
+            </div>
+          </div>
 
-          <div style={{ marginTop: 8 }}>
-            {editingGoal ? (
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="number"
-                  value={goalInput}
-                  onChange={(e) => setGoalInput(e.target.value)}
-                  style={{ width: 80 }}
-                />
-                <button onClick={() => saveGoal(goalInput)}>Save</button>
-                <button onClick={() => { setEditingGoal(false); setGoalInput(dailyGoal); }}>Cancel</button>
-              </div>
+          <div>
+            <h4 style={{ margin: "0 0 10px", fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>TODAY’S ITEMS</h4>
+            {loading ? (
+              <div style={{ color: "var(--text-muted)", fontSize: 13, fontFamily: "var(--font-mono)" }}>Loading…</div>
+            ) : error ? (
+              <div style={{ color: "var(--red)", fontSize: 13 }}>{error}</div>
+            ) : entries.length === 0 ? (
+              <div style={{ color: "var(--text-muted)", fontSize: 13 }}>No items yet — scan or add a product.</div>
             ) : (
-              <div>
-                <button onClick={() => setEditingGoal(true)}>Edit goal</button>
-                <button onClick={resetGoalToDefault} style={{ marginLeft: 8 }}>Reset</button>
-              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                {entries.map((entry) => (
+                  <EntryRow
+                    key={entry.id ?? entry._id ?? entry.timestamp}
+                    entry={entry}
+                    isRemoving={removingIds.has(entry.id)}
+                    onRemove={() => handleRemove(entry.id)}
+                  />
+                ))}
+              </ul>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Macros & list column */}
-      <div style={{ flex: 1 }}>
-        <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
-          <div style={{ flex: 1, padding: 8, borderRadius: 8, background: "#fafafa", textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Protein</div>
-            <div style={{ fontWeight: 700 }}>{Math.round(totals.protein)} g</div>
-          </div>
-          <div style={{ flex: 1, padding: 8, borderRadius: 8, background: "#fafafa", textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Carbs</div>
-            <div style={{ fontWeight: 700 }}>{Math.round(totals.carbs)} g</div>
-          </div>
-          <div style={{ flex: 1, padding: 8, borderRadius: 8, background: "#fafafa", textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#666" }}>Fat</div>
-            <div style={{ fontWeight: 700 }}>{Math.round(totals.fat)} g</div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 8 }}>
-          <h4 style={{ margin: "6px 0" }}>Today’s items</h4>
-          {loading ? (
-            <div>Loading…</div>
-          ) : error ? (
-            <div style={{ color: "crimson" }}>{error}</div>
-          ) : entries.length === 0 ? (
-            <div style={{ color: "#666" }}>No items yet — scan or add a product.</div>
-          ) : (
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {entries.map((entry) => (
-                <EntryRow
-                  key={entry.id ?? entry._id ?? entry.timestamp}
-                  entry={entry}
-                  isRemoving={removingIds.has(entry.id)}
-                  onRemove={() => handleRemove(entry.id)}   // <-- pass id only
-                />
-              ))}
-            </ul>
-          )}
         </div>
       </div>
     </div>

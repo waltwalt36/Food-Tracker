@@ -27,14 +27,14 @@ export default function ProgressRing({
     <svg width={size} height={size} className={className} aria-hidden="true">
       <defs>
         <linearGradient id="grad" x1="0%" x2="100%">
-          <stop offset="0%" stopColor="#4f46e5" />
-          <stop offset="100%" stopColor="#06b6d4" />
+          <stop offset="0%" stopColor="#F5A623" />
+          <stop offset="100%" stopColor="#7EC88A" />
         </linearGradient>
       </defs>
 
       {/* background circle */}
       <circle
-        stroke="#e6e6e6"
+        stroke="rgba(240, 234, 214, 0.08)"
         fill="transparent"
         strokeWidth={stroke}
         r={normalizedRadius}

@@ -1,14 +1,143 @@
+:root {
+  --bg: #040403;
+  --surface: #0B0B09;
+  --surface-2: #111110;
+  --surface-3: #191917;
+  --border: rgba(240, 234, 214, 0.10);
+  --border-btn: rgba(240, 234, 214, 0.22);
+  --border-accent: rgba(245, 166, 35, 0.40);
+  --text: #F0EAD6;
+  --text-muted: rgba(240, 234, 214, 0.42);
+  --text-soft: rgba(240, 234, 214, 0.68);
+  --accent: #F5A623;
+  --accent-dim: rgba(245, 166, 35, 0.13);
+  --accent-glow: rgba(245, 166, 35, 0.28);
+  --green: #7EC88A;
+  --red: #E06B6B;
+  --red-dim: rgba(224, 107, 107, 0.13);
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'Outfit', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --radius: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+}
+
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* ── Scanner viewport ── */
+#interactive {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: #000;
+}
+
+#interactive video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#interactive canvas.drawingBuffer {
+  display: none;
+}
+
+/* ── Scanning animation ── */
+@keyframes scanLine {
+  0%   { top: 8%; }
+  50%  { top: 84%; }
+  100% { top: 8%; }
+}
+
+.scan-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent), transparent);
+  box-shadow: 0 0 12px 2px var(--accent-glow);
+  animation: scanLine 2.4s ease-in-out infinite;
+  z-index: 10;
+  pointer-events: none;
+  border-radius: 1px;
+}
+
+/* ── Corner brackets ── */
+.scan-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: var(--accent);
+  border-style: solid;
+  z-index: 10;
+  opacity: 0.9;
+}
+.scan-corner.tl { top: 14px; left: 14px; border-width: 2px 0 0 2px; border-radius: 4px 0 0 0; }
+.scan-corner.tr { top: 14px; right: 14px; border-width: 2px 2px 0 0; border-radius: 0 4px 0 0; }
+.scan-corner.bl { bottom: 14px; left: 14px; border-width: 0 0 2px 2px; border-radius: 0 0 0 4px; }
+.scan-corner.br { bottom: 14px; right: 14px; border-width: 0 2px 2px 0; border-radius: 0 0 4px 0; }
+
+/* ── Fade-up entrance animation ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 0.45s ease forwards;
+}
+
+/* ── Button base ── */
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+  border: 1px solid var(--border-btn);
+  transition: opacity 0.15s, transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(240, 234, 214, 0.35);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Amber primary buttons override border */
+button[style*="var(--accent)"] {
+  border-color: rgba(245, 166, 35, 0.5) !important;
+  box-shadow: 0 2px 12px rgba(245, 166, 35, 0.15);
+}
+
+button[style*="var(--accent)"]:hover:not(:disabled) {
+  box-shadow: 0 4px 18px rgba(245, 166, 35, 0.28);
+  border-color: rgba(245, 166, 35, 0.7) !important;
+}
+
+/* ── Input base ── */
+input {
+  font-family: var(--font-body);
 }

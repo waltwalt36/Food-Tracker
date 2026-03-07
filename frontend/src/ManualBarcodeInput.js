@@ -41,8 +41,8 @@ export default function ManualBarcodeInput({ onLookup, disabled = false }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <label htmlFor="manual-barcode" style={{ fontSize: 14 }}>
-        Enter barcode
+      <label htmlFor="manual-barcode" style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
+        OR ENTER BARCODE MANUALLY
       </label>
 
       <div style={{ display: "flex", gap: 8 }}>
@@ -51,36 +51,48 @@ export default function ManualBarcodeInput({ onLookup, disabled = false }) {
           inputMode="numeric"
           pattern="[0-9]*"
           maxLength={13}
-          placeholder="Scan or type barcode (12 or 13 digits)"
+          placeholder="12 or 13 digit barcode"
           value={barcode}
           onChange={(e) => setBarcode(e.target.value)}
           onKeyDown={onKeyDown}
           disabled={disabled}
           style={{
             flex: 1,
-            padding: "8px 12px",
-            fontSize: 16,
-            borderRadius: 6,
-            border: "1px solid #ddd",
+            padding: "11px 16px",
+            fontSize: 15,
+            borderRadius: "var(--radius)",
+            border: "1px solid var(--border-btn)",
+            background: "var(--surface)",
+            color: "var(--text)",
+            fontFamily: "var(--font-mono)",
+            outline: "none",
+            transition: "border-color 0.15s",
           }}
+          onFocus={e => e.target.style.borderColor = "var(--accent)"}
+          onBlur={e => e.target.style.borderColor = "var(--border)"}
           aria-invalid={!!error}
         />
         <button
           onClick={submit}
           disabled={disabled}
           style={{
-            padding: "8px 12px",
-            fontSize: 16,
-            borderRadius: 6,
-            cursor: "pointer",
+            padding: "11px 20px",
+            fontSize: 14,
+            fontWeight: 600,
+            borderRadius: "var(--radius)",
+            border: "none",
+            background: "var(--accent)",
+            color: "#0A0A08",
+            whiteSpace: "nowrap",
+            fontFamily: "var(--font-body)",
           }}
         >
-          Lookup
+          Look up
         </button>
       </div>
 
       {error && (
-        <div role="alert" style={{ color: "crimson", fontSize: 13 }}>
+        <div role="alert" style={{ color: "var(--red)", fontSize: 13 }}>
           {error}
         </div>
       )}

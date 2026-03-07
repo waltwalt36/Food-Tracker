@@ -215,7 +215,7 @@ class EntryOut(BaseModel):
     timestamp: Optional[str]
 
 # ---------------------------------    
-# DELETE ENDPOINT FOR ENTRIES TABLE
+# GET ENDPOINT FOR ENTRIES TABLE
 # ---------------------------------
 
 @app.get("/api/entries", response_model=list[EntryOut])
@@ -311,7 +311,7 @@ def delete_entry(entry_id: int, current_user=Depends(get_current_user)):
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Fake secret key for JWT signing (in production, keep this secret!)
-SECRET_KEY = os.environ.get("SECRET_KEY", "Waltclem2006@")
+SECRET_KEY = os.environ.get("SECRET_KEY", "12345")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24h for dev
 

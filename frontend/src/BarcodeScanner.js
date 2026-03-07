@@ -9,24 +9,14 @@ const BarcodeScanner = () => {
   const [product, setProduct] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(0);
   const [lastAddedEntry, setLastAddedEntry] = useState(null);
-  const lastScanRef = useRef(0);
-  const coolDown = 2000;
+  const [scanError, setScanError] = useState(null);
+  const [scannerReady, setScannerReady] = useState(false);
+  const detectionBuffer = useRef([]);
+  const REQUIRED_MATCHES = 5;
 
   // shared lookup function used by both scanner and manual input
   const lookupBarcode = async (Barcode) => {
     try {
-      const now = Date.now();
-
-      // if this call comes from scanner, we already check cooldown in onDetected,
-      // but keep this here as a defensive check for manual calls too.
-      if (now - lastScanRef.current < coolDown) {
-        console.log('Lookup ignored due to cooldown');
-        return;
-      }
-
-      // mark the time so subsequent calls are rate-limited
-      lastScanRef.current = now;
-
       console.log('Looking up barcode:', Barcode);
 
       const response = await axios.post(
@@ -54,39 +44,45 @@ const BarcodeScanner = () => {
       {
       inputStream: {
         type: 'LiveStream',
+        target: document.querySelector('#interactive'),
         constraints: {
           width: 640,
           height: 480,
-          facingMode: 'environment'
         }
       },
+      numOfWorkers: 2,
+      locate: true,
       decoder: {
         readers: ['ean_reader', 'upc_reader']
       }
     }, (err) => {
       if (err) {
-        console.error(err);
+        console.error('Quagga init error:', err);
+        setScanError(typeof err === 'string' ? err : (err?.message || JSON.stringify(err)));
         return;
       }
+      console.log('Quagga started successfully');
+      setScannerReady(true);
       Quagga.start();
-    });
 
-    Quagga.onDetected((data) => {
-      const Barcode = data.codeResult.code;
-      const now = Date.now();
+      Quagga.onDetected((data) => {
+        const code = data.codeResult.code;
 
-      // enforce cooldown using lastScanRef so manual and scanner share it
-      if (now - lastScanRef.current > coolDown) {
-        console.log('Barcode detected:', { Barcode });
+        // collect into buffer; only accept when the same code appears REQUIRED_MATCHES times in a row
+        detectionBuffer.current.push(code);
+        if (detectionBuffer.current.length > REQUIRED_MATCHES) {
+          detectionBuffer.current.shift();
+        }
 
-        // update lastScanRef here (defensive; lookupBarcode will also set it)
-        lastScanRef.current = now;
+        const allMatch = detectionBuffer.current.length === REQUIRED_MATCHES &&
+          detectionBuffer.current.every(c => c === code);
 
-        // call shared lookup function
-        lookupBarcode(Barcode);
-      } else {
-        console.log('Scan ignored due to cooldown');
-      }
+        if (allMatch) {
+          console.log('Barcode confirmed:', code);
+          detectionBuffer.current = [];
+          lookupBarcode(code);
+        }
+      });
     });
 
     return () => {
@@ -103,41 +99,127 @@ const BarcodeScanner = () => {
   }, []); // run once
 
   return (
-    <div>
-      <h2>Scan a Barcode</h2>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-        <div
-          id="interactive"
-          className="viewport"
-          style={{ flex: 1, minHeight: 360, background: '#FFF' }}
-        />
-        <div style={{ width: 360 }}>
-          {/* DAILY SUMMARY: will refetch when lastUpdated changes */}
-          <DailySummary dailyGoal={2200} lastUpdated={lastUpdated} lastAddedEntry={lastAddedEntry}/>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 24px 60px' }}>
 
-          {/* Manual barcode input wired to the same lookup function */}
-          <div style={{ marginTop: 16 }}>
-            <ManualBarcodeInput onLookup={lookupBarcode} />
-          </div>
+      {/* Page title */}
+      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <h2 style={{
+          margin: 0,
+          fontFamily: 'var(--font-display)',
+          fontSize: 28,
+          fontWeight: 800,
+          letterSpacing: '-0.03em',
+          color: 'var(--text)',
+        }}>
+          Scan a <span style={{ color: 'var(--accent)' }}>barcode</span>
+        </h2>
+        <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: 14, fontWeight: 300 }}>
+          Point your camera at a food barcode to log nutrition
+        </p>
+      </div>
 
-          <div style={{ marginTop: 12 }}>
-            {product ? (
-              <ProductInfo product={product} onAdded={(createdEntry) => {
-                console.log("BarcodeScanner: onAdded called with:", createdEntry);
-                if (createdEntry) {
-                  // set lastAddedEntry so DailySummary can optimistically update
-                  setLastAddedEntry(createdEntry);
-                }
-                // bump lastUpdated so DailySummary also refetches
-                setLastUpdated(Date.now());
-              }}
-            />
-            ) : (
-              <div style={{ padding: 12, color: '#666' }}>
-                Scan a product or type a barcode to see nutrition info
-              </div>
+      {/* Scanner — centered hero */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+        <div style={{ width: '100%', maxWidth: 580 }}>
+
+          {scanError && (
+            <div style={{
+              color: 'var(--red)',
+              marginBottom: 12,
+              padding: '12px 16px',
+              background: 'var(--red-dim)',
+              border: '1px solid rgba(224,107,107,0.25)',
+              borderRadius: 'var(--radius)',
+              fontSize: 14,
+            }}>
+              <strong>Camera error:</strong> {scanError}
+            </div>
+          )}
+
+          {!scannerReady && !scanError && (
+            <div style={{
+              color: 'var(--text-muted)',
+              fontSize: 13,
+              textAlign: 'center',
+              marginBottom: 8,
+              fontFamily: 'var(--font-mono)',
+            }}>
+              starting camera…
+            </div>
+          )}
+
+          {/* Scanner frame */}
+          <div style={{ position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+            {scannerReady && (
+              <>
+                <div className="scan-line" />
+                <div className="scan-corner tl" />
+                <div className="scan-corner tr" />
+                <div className="scan-corner bl" />
+                <div className="scan-corner br" />
+              </>
             )}
+            <div
+              id="interactive"
+              className="viewport"
+              style={{ height: 400 }}
+            />
           </div>
+
+          {/* Status badge */}
+          {scannerReady && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              marginTop: 10,
+            }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: 'var(--green)',
+                boxShadow: '0 0 6px var(--green)',
+                display: 'inline-block',
+              }} />
+              <span style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+                scanner active
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Manual input — centered below scanner */}
+      <div style={{ maxWidth: 580, margin: '0 auto 40px' }}>
+        <ManualBarcodeInput onLookup={lookupBarcode} />
+      </div>
+
+      {/* Bottom row: Daily summary + Product info */}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <DailySummary dailyGoal={2200} lastUpdated={lastUpdated} lastAddedEntry={lastAddedEntry} />
+        </div>
+
+        <div style={{ flex: 1 }}>
+          {product ? (
+            <ProductInfo product={product} onAdded={(createdEntry) => {
+              console.log("BarcodeScanner: onAdded called with:", createdEntry);
+              if (createdEntry) setLastAddedEntry(createdEntry);
+              setLastUpdated(Date.now());
+            }} />
+          ) : (
+            <div style={{
+              padding: '32px 24px',
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+              background: 'var(--surface)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border)',
+              fontSize: 14,
+            }}>
+              Scan a product or type a barcode to see nutrition info
+            </div>
+          )}
         </div>
       </div>
     </div>

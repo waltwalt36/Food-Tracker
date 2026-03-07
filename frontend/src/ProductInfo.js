@@ -145,38 +145,82 @@ const handleAddToDatabase = async () => {
     }
 };
 
-  return (
-    <div>
-      <h3>{product.product_name ?? 'Unnamed product'}</h3>
-      <p>Calories: {fmt('energy-kcal')} kcal</p>
-      <p>Total Fat: {fmt('fat')} g</p>
-      <p>Saturated Fat: {fmt('saturated-fat')} g</p>
-      <p>Trans Fat: {fmt('trans-fat')} g</p>
-      <p>Cholesterol: {fmt('cholesterol', { mul: 1000 })} mg</p>
-      <p>Sodium: {fmt('sodium', { mul: 1000 })} mg</p>
-      <p>Total Carbs: {fmt('carbohydrates')} g</p>
-      <p>Dietary Fiber: {fmt('fiber')} g</p>
-      <p>Total Sugars: {fmt('sugars')} g</p>
-      <p>Added Sugars: {fmt('added-sugars')} g</p>
-      <p>Protein: {fmt('proteins')} g</p>
+  const row = (label, value, unit) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ fontSize: 13, color: "var(--text-soft)" }}>{label}</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{value} <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{unit}</span></span>
+    </div>
+  );
 
-      <div style={{ marginTop: 12 }}>
-        <label>
-          Servings:
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 20 }}>
+      <h3 style={{ margin: "0 0 4px", fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
+        {product.product_name ?? 'Unnamed product'}
+      </h3>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--accent)", marginBottom: 16 }}>
+        {fmt('energy-kcal')} <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 400 }}>kcal</span>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        {row("Total Fat", fmt('fat'), "g")}
+        {row("Saturated Fat", fmt('saturated-fat'), "g")}
+        {row("Trans Fat", fmt('trans-fat'), "g")}
+        {row("Cholesterol", fmt('cholesterol', { mul: 1000 }), "mg")}
+        {row("Sodium", fmt('sodium', { mul: 1000 }), "mg")}
+        {row("Total Carbs", fmt('carbohydrates'), "g")}
+        {row("Dietary Fiber", fmt('fiber'), "g")}
+        {row("Total Sugars", fmt('sugars'), "g")}
+        {row("Added Sugars", fmt('added-sugars'), "g")}
+        {row("Protein", fmt('proteins'), "g")}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--text-soft)" }}>
+          Servings
           <input
             type="number"
             value={servings}
             min="0.1"
             step="0.1"
             onChange={(e) => setServings(e.target.value)}
-            style={{ marginLeft: 8, width: 80 }}
+            style={{
+              width: 70,
+              padding: "7px 10px",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              color: "var(--text)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 14,
+            }}
           />
         </label>
-        <button onClick={handleAddToDatabase} disabled={loading || !user} style={{ marginLeft: 12 }} title= {!user ? "Log in to save entries" : ""}>
-          {loading ? 'Saving...' : 'Add to Daily Calories'}
+        <button
+          onClick={handleAddToDatabase}
+          disabled={loading || !user}
+          title={!user ? "Log in to save entries" : ""}
+          style={{
+            flex: 1,
+            padding: "10px 0",
+            fontSize: 14,
+            fontWeight: 600,
+            background: loading || !user ? "var(--surface-3)" : "var(--accent)",
+            color: loading || !user ? "var(--text-muted)" : "#0A0A08",
+            border: "none",
+            borderRadius: 10,
+            fontFamily: "var(--font-body)",
+            letterSpacing: "0.01em",
+          }}
+        >
+          {loading ? 'Saving…' : 'Add to Daily Calories'}
         </button>
-        {!user && <div style={{ color: "crimson", marginTop: 8 }}>You must be logged in to save entries.</div>}
       </div>
+
+      {!user && (
+        <div style={{ color: "var(--red)", marginTop: 10, fontSize: 13 }}>
+          You must be logged in to save entries.
+        </div>
+      )}
     </div>
   );
 };
