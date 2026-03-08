@@ -1,4 +1,4 @@
-# Yummy
+# Food-Tracker
 Track calories by scanning food barcodes. Built with React and FastAPI, backed by PostgreSQL.
 
 ## Prerequisites
