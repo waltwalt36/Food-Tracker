@@ -214,94 +214,10 @@ class EntryOut(BaseModel):
 
     timestamp: Optional[str]
 
-# ---------------------------------    
-# GET ENDPOINT FOR ENTRIES TABLE
-# ---------------------------------
-
-@app.get("/api/entries", response_model=list[EntryOut])
-def get_entries_by_date(date: str = Query(..., description="YYYY-MM-DD")):
-    """
-    Return list of entries for the given date (UTC day window).
-    Date format: YYYY-MM-DD
-    """
-    # parse date
-    try:
-        qdate = datetime.strptime(date, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
-
-    # build UTC day range [start, end)
-    start_dt = datetime.combine(qdate, time.min).replace(tzinfo=timezone.utc)
-    end_dt = start_dt + timedelta(days=1)
-
-    conn = None
-    cur = None
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        sql = """
-        SELECT id, product_name, barcode, calories_per_serving, servings, total_calories,
-               total_fat, saturated_fat, trans_fat, cholesterol, sodium,
-               total_carbs, dietary_fiber, total_sugars, added_sugars, protein,
-               timestamp
-        FROM entries
-        WHERE timestamp >= %s AND timestamp < %s
-        ORDER BY timestamp ASC;
-        """
-        cur.execute(sql, (start_dt, end_dt))
-        rows = cur.fetchall()
-        # map rows to dicts
-        columns = [desc[0] for desc in cur.description]
-        results = []
-        for r in rows:
-            obj = dict(zip(columns, r))
-            # psycopg2 may return datetime with tzinfo or without; ensure it's ISO serializable
-            if obj.get("timestamp") is not None:
-                # make sure it's a timezone-aware ISO string
-                ts = obj["timestamp"]
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-                obj["timestamp"] = ts.isoformat()
-            # convert UUIDs to str if necessary
-            if obj.get("id") is not None:
-                obj["id"] = str(obj["id"])
-            results.append(obj)
-        return results
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
-
 # ----------------------------------   
 # DELETE ENDPOINT FOR ENTRIES TABLE
 # ----------------------------------
 
-@app.delete("/api/entries/{entry_id}", status_code=204)
-def delete_entry(entry_id: int, current_user=Depends(get_current_user)):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    DELETE FROM entries
-                    WHERE id = %s AND user_id = %s
-                    RETURNING id
-                    """,
-                    (entry_id, current_user["id"]),
-                )
-                row = cur.fetchone()
-                if not row:
-                    raise HTTPException(status_code=404, detail="Entry not found")
-        return
-    finally:
-        conn.close()
 
 # -----------------------------------
 # USER VERIFICATION STUFF USING AUTH
@@ -418,13 +334,16 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 # -----------
 
 @app.get("/api/entries/")
-def get_entries(date: str, current_user=Depends(get_current_user)):
-    # validate date format early
+def get_entries(date: str, tz_offset: int = 0, current_user=Depends(get_current_user)):
     try:
-        # ensures `date` is YYYY-MM-DD
-        datetime.strptime(date, "%Y-%m-%d")
+        local_date = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    # tz_offset is JS getTimezoneOffset(): (UTC - local) in minutes.
+    # e.g. EST = +300, so local midnight in UTC = local midnight + 300 min.
+    start_utc = datetime.combine(local_date, time.min) + timedelta(minutes=tz_offset)
+    end_utc = start_utc + timedelta(days=1)
 
     conn = get_db_connection()
     try:
@@ -434,17 +353,81 @@ def get_entries(date: str, current_user=Depends(get_current_user)):
                 SELECT *
                 FROM entries
                 WHERE user_id = %s
-                  AND (timestamp::date) = %s
+                  AND timestamp >= %s
+                  AND timestamp < %s
                 ORDER BY timestamp ASC;
                 """,
-                (current_user["id"], date)
+                (current_user["id"], start_utc, end_utc)
             )
             rows = cur.fetchall()
-            # helpful debug: log count
-            print(f"get_entries: user={current_user['id']} date={date} rows={len(rows)}")
+            print(f"get_entries: user={current_user['id']} date={date} tz_offset={tz_offset} utc_range=[{start_utc}, {end_utc}) rows={len(rows)}")
             return rows
     finally:
         conn.close()
+
+# -------------------------------------------------------------            
+# GET ENDPOINT FOR ENTRIES TABLE DOESNT HAVE AUTH VERIFICATION
+# -------------------------------------------------------------        
+
+@app.get("/api/entries", response_model=list[EntryOut])
+def get_entries_by_date(date: str = Query(..., description="YYYY-MM-DD")):
+    """
+    Return list of entries for the given date (UTC day window).
+    Date format: YYYY-MM-DD
+    """
+    # parse date
+    try:
+        qdate = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    # build UTC day range [start, end)
+    start_dt = datetime.combine(qdate, time.min).replace(tzinfo=timezone.utc)
+    end_dt = start_dt + timedelta(days=1)
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        sql = """
+        SELECT id, product_name, barcode, calories_per_serving, servings, total_calories,
+               total_fat, saturated_fat, trans_fat, cholesterol, sodium,
+               total_carbs, dietary_fiber, total_sugars, added_sugars, protein,
+               timestamp
+        FROM entries
+        WHERE timestamp >= %s AND timestamp < %s
+        ORDER BY timestamp ASC;
+        """
+        cur.execute(sql, (start_dt, end_dt))
+        rows = cur.fetchall()
+        # map rows to dicts
+        columns = [desc[0] for desc in cur.description]
+        results = []
+        for r in rows:
+            obj = dict(zip(columns, r))
+            # psycopg2 may return datetime with tzinfo or without; ensure it's ISO serializable
+            if obj.get("timestamp") is not None:
+                # make sure it's a timezone-aware ISO string
+                ts = obj["timestamp"]
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                obj["timestamp"] = ts.isoformat()
+            # convert UUIDs to str if necessary
+            if obj.get("id") is not None:
+                obj["id"] = str(obj["id"])
+            results.append(obj)
+        return results
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 # --------------
 # DELETE ENTRIES
